@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>폴짝 미션</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+    }
+
+    /* ── 카메라 레이어 ── */
+    #camVideo {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      z-index: 0;
+    }
+
+    /* 카메라 없을 때 배경 */
+    #camFallback {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      z-index: 0;
+    }
+
+    /* ── UI 레이어 ── */
+    #ui {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* ── 미션 카드 (상단 중앙) ── */
+    .mission-card {
+      position: absolute;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(90vw, 420px);
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(18px) saturate(1.5);
+      -webkit-backdrop-filter: blur(18px) saturate(1.5);
+      border: 1.5px solid rgba(255,255,255,0.35);
+      border-radius: 24px;
+      padding: 20px 24px 18px;
+      text-align: center;
+      pointer-events: all;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    .mission-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.25);
+      color: white;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 99px;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .mission-emoji {
+      font-size: 3rem;
+      display: block;
+      line-height: 1;
+      margin-bottom: 8px;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
+    }
+
+    .mission-name {
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: white;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      margin-bottom: 6px;
+      line-height: 1.2;
+    }
+
+    .mission-desc {
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.85);
+      line-height: 1.5;
+    }
+
+    /* ── 진행 바 (상단 가장자리) ── */
+    .progress-bar-wrap {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 5px;
+      background: rgba(255,255,255,0.2);
+      z-index: 20;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      transition: width 0.5s ease;
+    }
+
+    .progress-label {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      color: rgba(255,255,255,0.7);
+      font-size: 0.75rem;
+      font-weight: 600;
+      pointer-events: none;
+    }
+
+    /* ── 성공 버튼 (하단 오른쪽) ── */
+    .btn-success {
+      position: absolute;
+      bottom: 48px;
+      right: 36px;
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #10b981, #34d399);
+      color: white;
+      font-size: 0.95rem;
+      font-weight: 800;
+      border: 3px solid rgba(255,255,255,0.5);
+      cursor: pointer;
+      pointer-events: all;
+      box-shadow: 0 8px 32px rgba(16,185,129,0.5), 0 0 0 0 rgba(52,211,153,0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      animation: pulse 2s infinite;
+    }
+
+    .btn-success:hover {
+      transform: scale(1.08);
+      box-shadow: 0 12px 40px rgba(16,185,129,0.65), 0 0 0 8px rgba(52,211,153,0.2);
+    }
+
+    .btn-success:active {
+      transform: scale(0.95);
+      animation: none;
+    }
+
+    .btn-success-icon { font-size: 1.6rem; line-height: 1; }
+    .btn-success-text { font-size: 0.8rem; font-weight: 700; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 8px 32px rgba(16,185,129,0.5), 0 0 0 0 rgba(52,211,153,0.4); }
+      50% { box-shadow: 0 8px 32px rgba(16,185,129,0.5), 0 0 0 12px rgba(52,211,153,0); }
+    }
+
+    /* ── 성공 플래시 ── */
+    #successFlash {
+      position: fixed;
+      inset: 0;
+      background: rgba(52, 211, 153, 0.35);
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+
+    #successFlash.show { opacity: 1; }
+
+    /* ── 완료 화면 ── */
+    #completeScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(10px);
+    }
+
+    #completeScreen.show { display: flex; }
+
+    .complete-card {
+      background: white;
+      border-radius: 28px;
+      padding: 48px 40px;
+      text-align: center;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.3);
+      max-width: 360px;
+      width: 90vw;
+    }
+
+    .complete-emoji { font-size: 4.5rem; display: block; margin-bottom: 16px; }
+    .complete-title { font-size: 2rem; font-weight: 900; color: #1e293b; margin-bottom: 8px; }
+    .complete-desc { font-size: 1rem; color: #64748b; line-height: 1.6; margin-bottom: 28px; }
+
+    .btn-restart {
+      padding: 16px 40px;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(99,102,241,0.3);
+      transition: transform 0.2s;
+    }
+
+    .btn-restart:hover { transform: translateY(-2px); }
+
+    /* ── LIVE 뱃지 ── */
+    .live-badge {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      background: rgba(239,68,68,0.85);
+      color: white;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 99px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      pointer-events: none;
+    }
+
+    .live-dot {
+      width: 6px; height: 6px;
+      background: white;
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* ── 카드 전환 애니메이션 ── */
+    @keyframes slideDown {
+      0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+      100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    .mission-card.animate {
+      animation: slideDown 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* confetti */
+    @keyframes confettiFall {
+      0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+    }
+
+    .confetti-piece {
+      position: fixed;
+      border-radius: 2px;
+      animation: confettiFall linear forwards;
+      pointer-events: none;
+      z-index: 40;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 카메라 레이어 -->
+  <div id="camFallback"></div>
+  <video id="camVideo" autoplay playsinline></video>
+
+  <!-- 성공 플래시 -->
+  <div id="successFlash"></div>
+
+  <!-- UI 레이어 -->
+  <div id="ui">
+    <!-- 진행바 -->
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+    </div>
+    <div class="progress-label" id="progressLabel">0 / 30</div>
+
+    <!-- LIVE 뱃지 -->
+    <div class="live-badge" id="liveBadge" style="display:none">
+      <span class="live-dot"></span> LIVE
+    </div>
+
+    <!-- 미션 카드 -->
+    <div class="mission-card" id="missionCard">
+      <div class="mission-badge" id="missionBadge">미션 1 / 30</div>
+      <span class="mission-emoji" id="missionEmoji"></span>
+      <div class="mission-name" id="missionName"></div>
+      <div class="mission-desc" id="missionDesc"></div>
+    </div>
+
+    <!-- 성공 버튼 -->
+    <button class="btn-success" onclick="onSuccess()">
+      <span class="btn-success-icon">✅</span>
+      <span class="btn-success-text">성공!</span>
+    </button>
+  </div>
+
+  <!-- 완료 화면 -->
+  <div id="completeScreen">
+    <div class="complete-card">
+      <span class="complete-emoji">🏆</span>
+      <div class="complete-title">모두 완료!</div>
+      <div class="complete-desc">30개 미션을 전부 해냈어요!<br>정말 대단해요! 👏</div>
+      <button class="btn-restart" onclick="restart()">🔄 다시 시작</button>
+    </div>
+  </div>
+
+  <script>
+    const missions = [
+      { emoji: "🦩", name: "한 발로 폴짝폴짝", desc: "한 발로 제자리에서 5번 뛰어보아요!" },
+      { emoji: "🐸", name: "개구리 점프", desc: "쭈그려 앉았다가 높이 점프!" },
+      { emoji: "🦘", name: "캥거루 뛰기", desc: "두 발을 모아서 앞으로 3번 뛰어가요!" },
+      { emoji: "🐧", name: "펭귄 걷기", desc: "발끝을 벌리고 뒤뚱뒤뚱 걸어요!" },
+      { emoji: "🦋", name: "나비 팔 흔들기", desc: "팔을 날개처럼 펼치고 나비처럼 흔들어요!" },
+      { emoji: "🐊", name: "악어 기어가기", desc: "배를 땅에 붙이고 팔로 기어가요!" },
+      { emoji: "🐨", name: "곰처럼 걷기", desc: "두 손, 두 발을 땅에 짚고 걸어요!" },
+      { emoji: "🦀", name: "게 걷기", desc: "손발을 땅에 짚고 옆으로 걸어요!" },
+      { emoji: "🐍", name: "뱀처럼 구불구불", desc: "바닥에 누워서 온몸으로 구불구불!" },
+      { emoji: "🐘", name: "코끼리 코 흔들기", desc: "두 팔을 늘어뜨리고 코처럼 흔들어요!" },
+      { emoji: "🐰", name: "토끼 점프", desc: "무릎을 살짝 구부리고 폴짝폴짝!" },
+      { emoji: "🦊", name: "여우 꼬리 잡기", desc: "제자리에서 빙글빙글 뒤를 쫓아요!" },
+      { emoji: "🐠", name: "물고기 헤엄치기", desc: "팔을 저으며 물고기처럼 헤엄쳐요!" },
+      { emoji: "🦅", name: "독수리 날기", desc: "팔을 크게 펼치고 날아다녀요!" },
+      { emoji: "🐛", name: "애벌레 구르기", desc: "몸을 동그랗게 말아서 옆으로 굴러요!" },
+      { emoji: "🐢", name: "거북이 걷기", desc: "아주 천천히~ 거북이처럼 느리게!" },
+      { emoji: "🦁", name: "사자 포효", desc: "두 팔을 높이 들고 어흥! 점프!" },
+      { emoji: "🐒", name: "원숭이 매달리기", desc: "팔을 크게 흔들며 신나게 뛰어요!" },
+      { emoji: "🌈", name: "무지개 점프", desc: "점프하며 팔로 무지개를 그려요!" },
+      { emoji: "⭐", name: "별 모양 점프", desc: "점프하며 팔다리를 크게 벌려요!" },
+      { emoji: "🌀", name: "팽이 돌기", desc: "제자리에서 5바퀴 빙글빙글!" },
+      { emoji: "🎯", name: "한 발 균형 잡기", desc: "한 발로 10초 동안 균형을 잡아요!" },
+      { emoji: "🏄", name: "파도타기 서핑", desc: "다리를 벌리고 서핑 자세를 해요!" },
+      { emoji: "🤸", name: "몸 구부리기", desc: "발을 벌리고 앞으로 허리를 구부려요!" },
+      { emoji: "🥁", name: "무릎 드럼 치기", desc: "손으로 무릎을 두드려 드럼을 쳐요!" },
+      { emoji: "🚀", name: "로켓 발사", desc: "쭈그려 앉았다가 발사! 높이 점프!" },
+      { emoji: "🌊", name: "파도 움직이기", desc: "팔을 물결처럼 부드럽게 흔들어요!" },
+      { emoji: "🎪", name: "광대 걷기", desc: "무릎을 높이 들며 씩씩하게 행진!" },
+      { emoji: "🧘", name: "나무 자세 균형", desc: "한 발로 서서 두 손을 머리 위로!" },
+      { emoji: "🎊", name: "축하 댄스", desc: "자유롭게 마음껏 춤춰요! 파이팅!" },
+    ];
+
+    let currentIndex = 0;
+    let completed = 0;
+
+    function renderMission(animate = false) {
+      const m = missions[currentIndex];
+      document.getElementById('missionBadge').textContent = `미션 ${currentIndex + 1} / ${missions.length}`;
+      document.getElementById('missionEmoji').textContent = m.emoji;
+      document.getElementById('missionName').textContent = m.name;
+      document.getElementById('missionDesc').textContent = m.desc;
+
+      if (animate) {
+        const card = document.getElementById('missionCard');
+        card.classList.remove('animate');
+        void card.offsetWidth;
+        card.classList.add('animate');
+      }
+
+      speak(`${m.name}. ${m.desc}`);
+    }
+
+    // TTS
+    function speak(text) {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'ko-KR';
+      utter.rate = 0.9;
+      utter.pitch = 1.1;
+      window.speechSynthesis.speak(utter);
+    }
+
+    function updateProgress() {
+      const pct = (completed / missions.length) * 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressLabel').textContent = `${completed} / ${missions.length}`;
+    }
+
+    function onSuccess() {
+      completed++;
+      updateProgress();
+      launchConfetti(30);
+      flashGreen();
+
+      currentIndex++;
+      if (currentIndex >= missions.length) {
+        setTimeout(showComplete, 400);
+        return;
+      }
+      renderMission(true);
+    }
+
+    function flashGreen() {
+      const el = document.getElementById('successFlash');
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 300);
+    }
+
+    function showComplete() {
+      document.getElementById('completeScreen').classList.add('show');
+      launchConfetti(100);
+    }
+
+    function restart() {
+      currentIndex = 0;
+      completed = 0;
+      updateProgress();
+      document.getElementById('completeScreen').classList.remove('show');
+      renderMission(true);
+    }
+
+    function launchConfetti(count = 40) {
+      const colors = ['#38bdf8','#818cf8','#34d399','#f472b6','#fbbf24','#f87171'];
+      for (let i = 0; i < count; i++) {
+        const el = document.createElement('div');
+        el.className = 'confetti-piece';
+        el.style.left = Math.random() * 100 + 'vw';
+        el.style.top = '-20px';
+        el.style.background = colors[Math.floor(Math.random() * colors.length)];
+        el.style.width = (6 + Math.random() * 8) + 'px';
+        el.style.height = (6 + Math.random() * 8) + 'px';
+        el.style.animationDuration = (1.2 + Math.random() * 2) + 's';
+        el.style.animationDelay = Math.random() * 0.4 + 's';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+      }
+    }
+
+    // 카메라 자동 시작
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+          audio: false
+        });
+        const video = document.getElementById('camVideo');
+        video.srcObject = stream;
+        await new Promise(resolve => { video.onloadedmetadata = resolve; });
+        await video.play();
+        document.getElementById('liveBadge').style.display = 'flex';
+        document.getElementById('camFallback').style.display = 'none';
+      } catch (e) {
+        console.warn('카메라 없음:', e);
+      }
+    }
+
+    startCamera();
+    renderMission();
+    updateProgress();
+  </script>
+</body>
+</html>
