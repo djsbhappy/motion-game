@@ -380,8 +380,17 @@
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'ko-KR';
-      utter.rate = 0.9;
-      utter.pitch = 1.1;
+      utter.rate = 1.05;
+      utter.pitch = 1.6;
+      utter.volume = 1;
+
+      // 여성 한국어 목소리 우선 선택
+      const voices = window.speechSynthesis.getVoices();
+      const femaleKo = voices.find(v =>
+        v.lang.startsWith('ko') && /female|woman|여성|yuna|heami|지은|선희/i.test(v.name)
+      ) || voices.find(v => v.lang.startsWith('ko'));
+      if (femaleKo) utter.voice = femaleKo;
+
       window.speechSynthesis.speak(utter);
     }
 
