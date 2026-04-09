@@ -177,6 +177,49 @@
     #successFlash.show { opacity: 1; }
 
     /* ── 완료 화면 ── */
+    /* ── 시작 화면 ── */
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(12px);
+    }
+
+    #startScreen.hidden { display: none; }
+
+    .start-card {
+      background: white;
+      border-radius: 28px;
+      padding: 48px 40px;
+      text-align: center;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+      max-width: 360px;
+      width: 90vw;
+    }
+
+    .start-emoji { font-size: 4.5rem; display: block; margin-bottom: 16px; }
+    .start-title { font-size: 2rem; font-weight: 900; color: #1e293b; margin-bottom: 8px; }
+    .start-desc { font-size: 1rem; color: #64748b; line-height: 1.6; margin-bottom: 28px; }
+
+    .btn-start {
+      padding: 18px 48px;
+      background: linear-gradient(135deg, #10b981, #34d399);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      font-size: 1.15rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(16,185,129,0.4);
+      transition: transform 0.2s;
+    }
+
+    .btn-start:hover { transform: translateY(-2px); }
+
     #completeScreen {
       position: fixed;
       inset: 0;
@@ -308,6 +351,16 @@
       <span class="btn-success-icon">✅</span>
       <span class="btn-success-text">성공!</span>
     </button>
+  </div>
+
+  <!-- 시작 화면 -->
+  <div id="startScreen">
+    <div class="start-card">
+      <span class="start-emoji">🏃</span>
+      <div class="start-title">폴짝 미션!</div>
+      <div class="start-desc">30가지 재미있는 동작 미션에<br>도전해 보아요! 준비되셨나요? 💪</div>
+      <button class="btn-start" onclick="startGame()">🚀 시작하기!</button>
+    </div>
   </div>
 
   <!-- 완료 화면 -->
@@ -468,9 +521,13 @@
       }
     }
 
+    function startGame() {
+      document.getElementById('startScreen').classList.add('hidden');
+      renderMission();
+      updateProgress();
+    }
+
     startCamera();
-    renderMission();
-    updateProgress();
   </script>
 </body>
 </html>
