@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>폴짝 미션</title>
+
+  <!-- TensorFlow.js + Pose Detection (MoveNet) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -26,7 +31,6 @@
       z-index: 0;
     }
 
-    /* 카메라 없을 때 배경 */
     #camFallback {
       position: fixed;
       inset: 0;
@@ -42,7 +46,7 @@
       pointer-events: none;
     }
 
-    /* ── 미션 카드 (상단 중앙) ── */
+    /* ── 미션 카드 ── */
     .mission-card {
       position: absolute;
       top: 40px;
@@ -95,7 +99,7 @@
       line-height: 1.5;
     }
 
-    /* ── 진행 바 (상단 가장자리) ── */
+    /* ── 진행 바 ── */
     .progress-bar-wrap {
       position: absolute;
       top: 0; left: 0; right: 0;
@@ -120,7 +124,7 @@
       pointer-events: none;
     }
 
-    /* ── 성공 버튼 (하단 오른쪽) ── */
+    /* ── 성공 버튼 ── */
     .btn-success {
       position: absolute;
       bottom: 48px;
@@ -143,6 +147,7 @@
       gap: 3px;
       transition: transform 0.15s ease, box-shadow 0.15s ease;
       animation: pulse 2s infinite;
+      z-index: 11;
     }
 
     .btn-success:hover {
@@ -163,6 +168,39 @@
       50% { box-shadow: 0 8px 32px rgba(16,185,129,0.5), 0 0 0 12px rgba(52,211,153,0); }
     }
 
+    /* ── 감지 링 (성공 버튼 둘레) ── */
+    #detectRingWrap {
+      position: absolute;
+      bottom: 43px;
+      right: 31px;
+      width: 100px;
+      height: 100px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #detectRingWrap svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    /* ── 감지 상태 표시 ── */
+    #detectStatus {
+      position: absolute;
+      bottom: 152px;
+      right: 16px;
+      background: rgba(0,0,0,0.55);
+      color: rgba(255,255,255,0.88);
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 5px 13px;
+      border-radius: 99px;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+    }
+
     /* ── 성공 플래시 ── */
     #successFlash {
       position: fixed;
@@ -176,7 +214,6 @@
 
     #successFlash.show { opacity: 1; }
 
-    /* ── 완료 화면 ── */
     /* ── 시작 화면 ── */
     #startScreen {
       position: fixed;
@@ -194,7 +231,7 @@
     .start-card {
       background: white;
       border-radius: 28px;
-      padding: 48px 40px;
+      padding: 48px 40px 36px;
       text-align: center;
       box-shadow: 0 24px 64px rgba(0,0,0,0.35);
       max-width: 360px;
@@ -203,7 +240,7 @@
 
     .start-emoji { font-size: 4.5rem; display: block; margin-bottom: 16px; }
     .start-title { font-size: 2rem; font-weight: 900; color: #1e293b; margin-bottom: 8px; }
-    .start-desc { font-size: 1rem; color: #64748b; line-height: 1.6; margin-bottom: 28px; }
+    .start-desc { font-size: 1rem; color: #64748b; line-height: 1.6; margin-bottom: 24px; }
 
     .btn-start {
       padding: 18px 48px;
@@ -220,6 +257,15 @@
 
     .btn-start:hover { transform: translateY(-2px); }
 
+    .ai-status {
+      margin-top: 14px;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .ai-status.ready { color: #10b981; font-weight: 600; }
+    .ai-status.error { color: #ef4444; }
+
+    /* ── 완료 화면 ── */
     #completeScreen {
       position: fixed;
       inset: 0;
@@ -301,7 +347,6 @@
       animation: slideDown 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
-    /* confetti */
     @keyframes confettiFall {
       0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
       100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
@@ -346,6 +391,21 @@
       <div class="mission-desc" id="missionDesc"></div>
     </div>
 
+    <!-- 감지 링 (버튼 뒤) -->
+    <div id="detectRingWrap">
+      <svg viewBox="0 0 110 110">
+        <circle cx="55" cy="55" r="50" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="6"/>
+        <circle id="detectRing" cx="55" cy="55" r="50"
+          fill="none" stroke="#34d399" stroke-width="6"
+          stroke-dasharray="314" stroke-dashoffset="314"
+          stroke-linecap="round"
+          style="transition: stroke-dashoffset 0.12s linear"/>
+      </svg>
+    </div>
+
+    <!-- 감지 상태 라벨 -->
+    <div id="detectStatus">🔍 동작 감지중</div>
+
     <!-- 성공 버튼 -->
     <button class="btn-success" onclick="onSuccess()">
       <span class="btn-success-icon">✅</span>
@@ -360,6 +420,7 @@
       <div class="start-title">폴짝 미션!</div>
       <div class="start-desc">30가지 재미있는 동작 미션에<br>도전해 보아요! 준비되셨나요? 💪</div>
       <button class="btn-start" onclick="startGame()">🚀 시작하기!</button>
+      <div id="aiStatus" class="ai-status">🔄 AI 동작 감지 로딩중...</div>
     </div>
   </div>
 
@@ -374,38 +435,68 @@
   </div>
 
   <script>
+    // ══════════════════════════════════════════
+    //  미션 데이터
+    // ══════════════════════════════════════════
     const missions = [
-      { emoji: "🦩", name: "한 발로 폴짝폴짝", desc: "한 발로 제자리에서 5번 뛰어보아요!" },
-      { emoji: "🐸", name: "개구리 점프", desc: "쭈그려 앉았다가 높이 점프!" },
-      { emoji: "🦘", name: "캥거루 뛰기", desc: "두 발을 모아서 앞으로 3번 뛰어가요!" },
-      { emoji: "🐧", name: "펭귄 걷기", desc: "발끝을 벌리고 뒤뚱뒤뚱 걸어요!" },
-      { emoji: "🦋", name: "나비 팔 흔들기", desc: "팔을 날개처럼 펼치고 나비처럼 흔들어요!" },
-      { emoji: "🐊", name: "악어 기어가기", desc: "배를 땅에 붙이고 팔로 기어가요!" },
-      { emoji: "🐨", name: "곰처럼 걷기", desc: "두 손, 두 발을 땅에 짚고 걸어요!" },
-      { emoji: "🦀", name: "게 걷기", desc: "손발을 땅에 짚고 옆으로 걸어요!" },
-      { emoji: "🐍", name: "뱀처럼 구불구불", desc: "바닥에 누워서 온몸으로 구불구불!" },
-      { emoji: "🐘", name: "코끼리 코 흔들기", desc: "두 팔을 늘어뜨리고 코처럼 흔들어요!" },
-      { emoji: "🐰", name: "토끼 점프", desc: "무릎을 살짝 구부리고 폴짝폴짝!" },
-      { emoji: "🦊", name: "여우 꼬리 잡기", desc: "제자리에서 빙글빙글 뒤를 쫓아요!" },
-      { emoji: "🐠", name: "물고기 헤엄치기", desc: "팔을 저으며 물고기처럼 헤엄쳐요!" },
-      { emoji: "🦅", name: "독수리 날기", desc: "팔을 크게 펼치고 날아다녀요!" },
-      { emoji: "🐛", name: "애벌레 구르기", desc: "몸을 동그랗게 말아서 옆으로 굴러요!" },
-      { emoji: "🐢", name: "거북이 걷기", desc: "아주 천천히~ 거북이처럼 느리게!" },
-      { emoji: "🦁", name: "사자 포효", desc: "두 팔을 높이 들고 어흥! 점프!" },
-      { emoji: "🐒", name: "원숭이 매달리기", desc: "팔을 크게 흔들며 신나게 뛰어요!" },
-      { emoji: "🌈", name: "무지개 점프", desc: "점프하며 팔로 무지개를 그려요!" },
-      { emoji: "⭐", name: "별 모양 점프", desc: "점프하며 팔다리를 크게 벌려요!" },
-      { emoji: "🌀", name: "팽이 돌기", desc: "제자리에서 5바퀴 빙글빙글!" },
-      { emoji: "🎯", name: "한 발 균형 잡기", desc: "한 발로 10초 동안 균형을 잡아요!" },
-      { emoji: "🏄", name: "파도타기 서핑", desc: "다리를 벌리고 서핑 자세를 해요!" },
-      { emoji: "🤸", name: "몸 구부리기", desc: "발을 벌리고 앞으로 허리를 구부려요!" },
-      { emoji: "🥁", name: "무릎 드럼 치기", desc: "손으로 무릎을 두드려 드럼을 쳐요!" },
-      { emoji: "🚀", name: "로켓 발사", desc: "쭈그려 앉았다가 발사! 높이 점프!" },
-      { emoji: "🌊", name: "파도 움직이기", desc: "팔을 물결처럼 부드럽게 흔들어요!" },
-      { emoji: "🎪", name: "광대 걷기", desc: "무릎을 높이 들며 씩씩하게 행진!" },
-      { emoji: "🧘", name: "나무 자세 균형", desc: "한 발로 서서 두 손을 머리 위로!" },
-      { emoji: "🎊", name: "축하 댄스", desc: "자유롭게 마음껏 춤춰요! 파이팅!" },
+      { emoji: "🦩", name: "한 발로 폴짝폴짝", desc: "한 발로 제자리에서 5번 뛰어보아요!", detect: "one_leg" },
+      { emoji: "🐸", name: "개구리 점프", desc: "쭈그려 앉았다가 높이 점프!", detect: "squat" },
+      { emoji: "🦘", name: "캥거루 뛰기", desc: "두 발을 모아서 앞으로 3번 뛰어가요!", detect: "jump" },
+      { emoji: "🐧", name: "펭귄 걷기", desc: "발끝을 벌리고 뒤뚱뒤뚱 걸어요!", detect: "high_knee" },
+      { emoji: "🦋", name: "나비 팔 흔들기", desc: "팔을 날개처럼 펼치고 나비처럼 흔들어요!", detect: "arms_wide" },
+      { emoji: "🐊", name: "악어 기어가기", desc: "배를 땅에 붙이고 팔로 기어가요!", detect: "body_low" },
+      { emoji: "🐨", name: "곰처럼 걷기", desc: "두 손, 두 발을 땅에 짚고 걸어요!", detect: "body_low" },
+      { emoji: "🦀", name: "게 걷기", desc: "손발을 땅에 짚고 옆으로 걸어요!", detect: "body_low" },
+      { emoji: "🐍", name: "뱀처럼 구불구불", desc: "바닥에 누워서 온몸으로 구불구불!", detect: "body_low" },
+      { emoji: "🐘", name: "코끼리 코 흔들기", desc: "두 팔을 늘어뜨리고 코처럼 흔들어요!", detect: "arm_wave" },
+      { emoji: "🐰", name: "토끼 점프", desc: "무릎을 살짝 구부리고 폴짝폴짝!", detect: "jump" },
+      { emoji: "🦊", name: "여우 꼬리 잡기", desc: "제자리에서 빙글빙글 뒤를 쫓아요!", detect: "spin" },
+      { emoji: "🐠", name: "물고기 헤엄치기", desc: "팔을 저으며 물고기처럼 헤엄쳐요!", detect: "arm_wave" },
+      { emoji: "🦅", name: "독수리 날기", desc: "팔을 크게 펼치고 날아다녀요!", detect: "arms_wide" },
+      { emoji: "🐛", name: "애벌레 구르기", desc: "몸을 동그랗게 말아서 옆으로 굴러요!", detect: "body_low" },
+      { emoji: "🐢", name: "거북이 걷기", desc: "아주 천천히~ 거북이처럼 느리게!", detect: "slow_move" },
+      { emoji: "🦁", name: "사자 포효", desc: "두 팔을 높이 들고 어흥! 점프!", detect: "arms_up" },
+      { emoji: "🐒", name: "원숭이 매달리기", desc: "팔을 크게 흔들며 신나게 뛰어요!", detect: "arm_wave" },
+      { emoji: "🌈", name: "무지개 점프", desc: "점프하며 팔로 무지개를 그려요!", detect: "jump" },
+      { emoji: "⭐", name: "별 모양 점프", desc: "점프하며 팔다리를 크게 벌려요!", detect: "star_jump" },
+      { emoji: "🌀", name: "팽이 돌기", desc: "제자리에서 5바퀴 빙글빙글!", detect: "spin" },
+      { emoji: "🎯", name: "한 발 균형 잡기", desc: "한 발로 10초 동안 균형을 잡아요!", detect: "one_leg" },
+      { emoji: "🏄", name: "파도타기 서핑", desc: "다리를 벌리고 서핑 자세를 해요!", detect: "squat" },
+      { emoji: "🤸", name: "몸 구부리기", desc: "발을 벌리고 앞으로 허리를 구부려요!", detect: "forward_bend" },
+      { emoji: "🥁", name: "무릎 드럼 치기", desc: "손으로 무릎을 두드려 드럼을 쳐요!", detect: "wrist_knee" },
+      { emoji: "🚀", name: "로켓 발사", desc: "쭈그려 앉았다가 발사! 높이 점프!", detect: "squat" },
+      { emoji: "🌊", name: "파도 움직이기", desc: "팔을 물결처럼 부드럽게 흔들어요!", detect: "arm_wave" },
+      { emoji: "🎪", name: "광대 걷기", desc: "무릎을 높이 들며 씩씩하게 행진!", detect: "high_knee" },
+      { emoji: "🧘", name: "나무 자세 균형", desc: "한 발로 서서 두 손을 머리 위로!", detect: "one_leg" },
+      { emoji: "🎊", name: "축하 댄스", desc: "자유롭게 마음껏 춤춰요! 파이팅!", detect: "dance" },
     ];
+
+    // ══════════════════════════════════════════
+    //  감지 타입 라벨
+    // ══════════════════════════════════════════
+    const DETECT_LABELS = {
+      jump:         '🦘 점프 감지중',
+      one_leg:      '🦩 한 발 들기 감지중',
+      arms_wide:    '🦅 팔 벌림 감지중',
+      body_low:     '🐊 낮은 자세 감지중',
+      squat:        '🐸 쭈그리기 감지중',
+      forward_bend: '🤸 앞으로 숙이기 감지중',
+      high_knee:    '🎪 무릎 들기 감지중',
+      arm_wave:     '🌊 팔 흔들기 감지중',
+      spin:         '🌀 회전 감지중',
+      arms_up:      '🦁 팔 올리기 감지중',
+      wrist_knee:   '🥁 무릎 치기 감지중',
+      star_jump:    '⭐ 별 점프 감지중',
+      slow_move:    '🐢 움직임 감지중',
+      dance:        '🎊 댄스 감지중',
+    };
+
+    // ══════════════════════════════════════════
+    //  게임 상태
+    // ══════════════════════════════════════════
+    let currentIndex = 0;
+    let completed = 0;
+    let gameStarted = false;
 
     function shuffle(arr) {
       for (let i = arr.length - 1; i > 0; i--) {
@@ -413,9 +504,6 @@
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
     }
-
-    let currentIndex = 0;
-    let completed = 0;
 
     function renderMission(animate = false) {
       const m = missions[currentIndex];
@@ -431,10 +519,21 @@
         card.classList.add('animate');
       }
 
+      // 감지 상태 초기화
+      detectionProgress = 0;
+      poseHistory.length = 0;
+      updateDetectRing(0);
+
+      // 감지 라벨 업데이트
+      const label = DETECT_LABELS[m.detect] || '🔍 동작 감지중';
+      const el = document.getElementById('detectStatus');
+      el.textContent = label;
+      el.style.display = poseDetector ? 'block' : 'none';
+
       speak(`${m.name}. ${m.desc}`);
     }
 
-    // TTS
+    // ── TTS ──
     function speak(text) {
       if (!window.speechSynthesis) return;
       window.speechSynthesis.cancel();
@@ -443,14 +542,11 @@
       utter.rate = 0.9;
       utter.pitch = 1.1;
       utter.volume = 1;
-
-      // 여성 한국어 목소리 우선 선택
       const voices = window.speechSynthesis.getVoices();
       const femaleKo = voices.find(v =>
         v.lang.startsWith('ko') && /female|woman|여성|yuna|heami|지은|선희/i.test(v.name)
       ) || voices.find(v => v.lang.startsWith('ko'));
       if (femaleKo) utter.voice = femaleKo;
-
       window.speechSynthesis.speak(utter);
     }
 
@@ -465,6 +561,9 @@
       updateProgress();
       launchConfetti(30);
       flashGreen();
+      detectionProgress = 0;
+      poseHistory.length = 0;
+      updateDetectRing(0);
 
       currentIndex++;
       if (currentIndex >= missions.length) {
@@ -482,6 +581,7 @@
 
     function showComplete() {
       document.getElementById('completeScreen').classList.add('show');
+      document.getElementById('detectStatus').style.display = 'none';
       launchConfetti(100);
     }
 
@@ -489,6 +589,9 @@
       shuffle(missions);
       currentIndex = 0;
       completed = 0;
+      detectionProgress = 0;
+      poseHistory.length = 0;
+      updateDetectRing(0);
       updateProgress();
       document.getElementById('completeScreen').classList.remove('show');
       renderMission(true);
@@ -511,7 +614,7 @@
       }
     }
 
-    // 카메라 자동 시작
+    // ── 카메라 ──
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -531,12 +634,250 @@
 
     function startGame() {
       shuffle(missions);
+      gameStarted = true;
       document.getElementById('startScreen').classList.add('hidden');
       renderMission();
       updateProgress();
     }
 
+    // ══════════════════════════════════════════
+    //  포즈 감지 (MoveNet)
+    // ══════════════════════════════════════════
+
+    let poseDetector = null;
+    let detectionProgress = 0;
+    const PROGRESS_INC = 5;   // 감지됐을 때 증가
+    const PROGRESS_DEC = 1;   // 미감지 시 감소
+    const PROGRESS_MAX = 100;
+    const HISTORY_LEN = 25;
+    const poseHistory = [];   // 정규화된 keypoint 배열
+
+    // MoveNet keypoint 인덱스
+    const KP = {
+      nose: 0,
+      lShoulder: 5, rShoulder: 6,
+      lElbow: 7, rElbow: 8,
+      lWrist: 9, rWrist: 10,
+      lHip: 11, rHip: 12,
+      lKnee: 13, rKnee: 14,
+      lAnkle: 15, rAnkle: 16,
+    };
+
+    function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+    function dst(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function ok(kp) { return kp && kp.score >= 0.25; }
+    function variance(arr) {
+      if (arr.length < 2) return 0;
+      const m = arr.reduce((s, v) => s + v, 0) / arr.length;
+      return arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length;
+    }
+
+    // 감지 함수: 현재 포즈 + 히스토리 기반으로 0 또는 1 반환
+    function detectGesture(type, kps) {
+      const ls = kps[KP.lShoulder], rs = kps[KP.rShoulder];
+      const lw = kps[KP.lWrist],   rw = kps[KP.rWrist];
+      const lh = kps[KP.lHip],     rh = kps[KP.rHip];
+      const lk = kps[KP.lKnee],    rk = kps[KP.rKnee];
+      const la = kps[KP.lAnkle],   ra = kps[KP.rAnkle];
+      const nose = kps[KP.nose];
+
+      const hipMid      = ok(lh) && ok(rh) ? mid(lh, rh) : null;
+      const shoulderMid = ok(ls) && ok(rs) ? mid(ls, rs) : null;
+
+      switch (type) {
+
+        case 'jump': {
+          if (!hipMid || poseHistory.length < 8) return 0;
+          // 최근 히스토리에서 hip y의 최대-최소 범위가 클 때 점프로 판정
+          const ys = poseHistory.slice(-12).map(h => {
+            const a = h[KP.lHip], b = h[KP.rHip];
+            return ok(a) && ok(b) ? (a.y + b.y) / 2 : null;
+          }).filter(v => v !== null);
+          if (ys.length < 6) return 0;
+          return (Math.max(...ys) - Math.min(...ys)) > 0.055 ? 1 : 0;
+        }
+
+        case 'one_leg': {
+          if (!hipMid || !ok(la) || !ok(ra)) return 0;
+          const hipY = hipMid.y;
+          // 한쪽 발목이 hip보다 높이 올라간 경우 (y값이 작음 = 화면 위)
+          const lRaised = la.y < hipY - 0.08;
+          const rRaised = ra.y < hipY - 0.08;
+          return (lRaised !== rRaised) ? 1 : 0; // 양발 다 들리면 점프이므로 제외
+        }
+
+        case 'arms_wide': {
+          if (!ok(lw) || !ok(rw)) return 0;
+          return dst(lw, rw) > 0.52 ? 1 : 0;
+        }
+
+        case 'body_low': {
+          if (!hipMid) return 0;
+          return hipMid.y > 0.70 ? 1 : 0;
+        }
+
+        case 'squat': {
+          if (!hipMid || !ok(lk) || !ok(rk)) return 0;
+          const kneeY = (lk.y + rk.y) / 2;
+          // hip이 낮고(화면 아래), hip-무릎 거리가 작음 (쭈그린 자세)
+          return (hipMid.y > 0.52 && Math.abs(hipMid.y - kneeY) < 0.16) ? 1 : 0;
+        }
+
+        case 'forward_bend': {
+          if (!ok(nose) || !ok(lk) || !ok(rk)) return 0;
+          const kneeY = (lk.y + rk.y) / 2;
+          // 코가 무릎 높이에 가까워질 때 숙인 자세
+          return Math.abs(nose.y - kneeY) < 0.12 ? 1 : 0;
+        }
+
+        case 'high_knee': {
+          if (!ok(lk) || !ok(rk) || !ok(la) || !ok(ra)) return 0;
+          const ankleY = (la.y + ra.y) / 2;
+          // 무릎 중 하나가 발목보다 훨씬 높이 올라간 경우
+          return (ankleY - lk.y > 0.14 || ankleY - rk.y > 0.14) ? 1 : 0;
+        }
+
+        case 'arm_wave': {
+          if (poseHistory.length < 10) return 0;
+          // 손목 y 위치의 분산이 크면 팔 흔들기
+          const lwYs = poseHistory.map(h => ok(h[KP.lWrist]) ? h[KP.lWrist].y : null).filter(v => v !== null);
+          const rwYs = poseHistory.map(h => ok(h[KP.rWrist]) ? h[KP.rWrist].y : null).filter(v => v !== null);
+          return (variance(lwYs) > 0.003 || variance(rwYs) > 0.003) ? 1 : 0;
+        }
+
+        case 'spin': {
+          if (poseHistory.length < 12) return 0;
+          // 어깨 중심 x의 이동 범위가 크면 회전
+          const xs = poseHistory.map(h => {
+            const a = h[KP.lShoulder], b = h[KP.rShoulder];
+            return ok(a) && ok(b) ? (a.x + b.x) / 2 : null;
+          }).filter(v => v !== null);
+          if (xs.length < 8) return 0;
+          return (Math.max(...xs) - Math.min(...xs)) > 0.13 ? 1 : 0;
+        }
+
+        case 'arms_up': {
+          if (!shoulderMid || !ok(lw) || !ok(rw)) return 0;
+          // 양쪽 손목이 어깨보다 높이(y값 작게) 올라간 경우
+          return (lw.y < shoulderMid.y - 0.04 && rw.y < shoulderMid.y - 0.04) ? 1 : 0;
+        }
+
+        case 'wrist_knee': {
+          if (!ok(lw) || !ok(rw) || !ok(lk) || !ok(rk)) return 0;
+          return (dst(lw, lk) < 0.18 || dst(rw, rk) < 0.18) ? 1 : 0;
+        }
+
+        case 'star_jump': {
+          // 점프 또는 팔 크게 벌리기
+          return (detectGesture('jump', kps) || detectGesture('arms_wide', kps)) ? 1 : 0;
+        }
+
+        case 'slow_move': {
+          if (poseHistory.length < 5) return 0;
+          // 미세한 움직임도 감지
+          const noseXs = poseHistory.map(h => ok(h[KP.nose]) ? h[KP.nose].x : null).filter(v => v !== null);
+          if (noseXs.length < 4) return 0;
+          return (Math.max(...noseXs) - Math.min(...noseXs)) > 0.012 ? 1 : 0;
+        }
+
+        case 'dance': {
+          if (poseHistory.length < 8) return 0;
+          // hip 위치 변화 (x 또는 y) 가 크면 춤
+          const hxs = poseHistory.map(h => {
+            const a = h[KP.lHip], b = h[KP.rHip];
+            return ok(a) && ok(b) ? (a.x + b.x) / 2 : null;
+          }).filter(v => v !== null);
+          const hys = poseHistory.map(h => {
+            const a = h[KP.lHip], b = h[KP.rHip];
+            return ok(a) && ok(b) ? (a.y + b.y) / 2 : null;
+          }).filter(v => v !== null);
+          if (hxs.length < 6) return 0;
+          const xR = Math.max(...hxs) - Math.min(...hxs);
+          const yR = Math.max(...hys) - Math.min(...hys);
+          return (xR > 0.04 || yR > 0.04) ? 1 : 0;
+        }
+
+        default:
+          return 0;
+      }
+    }
+
+    // 감지 링 업데이트 (progress: 0~100)
+    function updateDetectRing(progress) {
+      const circumference = 314;
+      const offset = circumference * (1 - progress / PROGRESS_MAX);
+      document.getElementById('detectRing').style.strokeDashoffset = offset;
+    }
+
+    // 메인 포즈 감지 루프
+    async function poseLoop() {
+      const video = document.getElementById('camVideo');
+      if (poseDetector && gameStarted && video.readyState >= 2 && video.videoWidth > 0) {
+        try {
+          const poses = await poseDetector.estimatePoses(video);
+          if (poses.length > 0) {
+            // 정규화된 keypoint 배열 생성
+            const kps = poses[0].keypoints.map(kp => ({
+              x: kp.x / video.videoWidth,
+              y: kp.y / video.videoHeight,
+              score: kp.score,
+            }));
+
+            // 히스토리 관리
+            poseHistory.push(kps);
+            if (poseHistory.length > HISTORY_LEN) poseHistory.shift();
+
+            // 현재 미션 감지 타입
+            const detectType = missions[currentIndex]?.detect || 'dance';
+            const detected = detectGesture(detectType, kps);
+
+            if (detected) {
+              detectionProgress = Math.min(PROGRESS_MAX, detectionProgress + PROGRESS_INC);
+            } else {
+              detectionProgress = Math.max(0, detectionProgress - PROGRESS_DEC);
+            }
+
+            updateDetectRing(detectionProgress);
+
+            // 진행도가 가득 차면 자동 성공
+            if (detectionProgress >= PROGRESS_MAX) {
+              detectionProgress = 0;
+              poseHistory.length = 0;
+              onSuccess();
+            }
+          }
+        } catch (e) {
+          // pose 감지 오류는 조용히 무시
+        }
+      }
+      // ~15fps
+      setTimeout(() => requestAnimationFrame(poseLoop), 66);
+    }
+
+    // MoveNet 모델 로드
+    async function loadPoseDetector() {
+      const statusEl = document.getElementById('aiStatus');
+      try {
+        await tf.setBackend('webgl');
+        await tf.ready();
+        poseDetector = await poseDetection.createDetector(
+          poseDetection.SupportedModels.MoveNet,
+          { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+        );
+        statusEl.textContent = '✅ AI 동작 감지 준비 완료!';
+        statusEl.classList.add('ready');
+        // 감지 루프 시작
+        requestAnimationFrame(poseLoop);
+      } catch (e) {
+        console.warn('Pose detector 로드 실패:', e);
+        statusEl.textContent = '⚠️ AI 감지 불가 (버튼으로 성공 확인)';
+        statusEl.classList.add('error');
+      }
+    }
+
+    // ── 초기화 ──
     startCamera();
+    loadPoseDetector();
   </script>
 </body>
 </html>
