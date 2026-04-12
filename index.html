@@ -646,11 +646,11 @@
 
     let poseDetector = null;
     let detectionProgress = 0;
-    const PROGRESS_INC = 5;   // 감지됐을 때 증가
-    const PROGRESS_DEC = 1;   // 미감지 시 감소
+    const PROGRESS_INC = 4;    // 감지됐을 때 증가
+    const PROGRESS_DEC = 0.3;  // 미감지 시 감소 (천천히 — 잠깐 끊겨도 링 유지)
     const PROGRESS_MAX = 100;
-    const HISTORY_LEN = 25;
-    const poseHistory = [];   // 정규화된 keypoint 배열
+    const HISTORY_LEN = 30;
+    const poseHistory = [];    // 정규화된 keypoint 배열
 
     // MoveNet keypoint 인덱스
     const KP = {
@@ -665,11 +665,21 @@
 
     function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
     function dst(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-    function ok(kp) { return kp && kp.score >= 0.25; }
+    function ok(kp) { return kp && kp.score >= 0.20; }
     function variance(arr) {
       if (arr.length < 2) return 0;
       const m = arr.reduce((s, v) => s + v, 0) / arr.length;
       return arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length;
+    }
+
+    // ── 신체 비율 기준: 어깨-hip 수직 거리 (카메라 거리와 무관한 상대 척도) ──
+    function bs(kps) {
+      const ls = kps[KP.lShoulder], rs = kps[KP.rShoulder];
+      const lh = kps[KP.lHip],     rh = kps[KP.rHip];
+      if (!ok(ls) || !ok(rs) || !ok(lh) || !ok(rh)) return 0.18;
+      const sy = (ls.y + rs.y) / 2;
+      const hy = (lh.y + rh.y) / 2;
+      return Math.max(0.08, hy - sy); // 어깨(위) < hip(아래), 항상 양수
     }
 
     // 감지 함수: 현재 포즈 + 히스토리 기반으로 0 또는 1 반환
@@ -683,106 +693,111 @@
 
       const hipMid      = ok(lh) && ok(rh) ? mid(lh, rh) : null;
       const shoulderMid = ok(ls) && ok(rs) ? mid(ls, rs) : null;
+      const scale = bs(kps); // 신체 비율 기준값
 
       switch (type) {
 
         case 'jump': {
+          // hip y의 최대-최소 범위 > 신체 비율의 25% → 점프
           if (!hipMid || poseHistory.length < 8) return 0;
-          // 최근 히스토리에서 hip y의 최대-최소 범위가 클 때 점프로 판정
-          const ys = poseHistory.slice(-12).map(h => {
+          const ys = poseHistory.slice(-15).map(h => {
             const a = h[KP.lHip], b = h[KP.rHip];
             return ok(a) && ok(b) ? (a.y + b.y) / 2 : null;
           }).filter(v => v !== null);
           if (ys.length < 6) return 0;
-          return (Math.max(...ys) - Math.min(...ys)) > 0.055 ? 1 : 0;
+          return (Math.max(...ys) - Math.min(...ys)) > scale * 0.25 ? 1 : 0;
         }
 
         case 'one_leg': {
-          if (!hipMid || !ok(la) || !ok(ra)) return 0;
-          const hipY = hipMid.y;
-          // 한쪽 발목이 hip보다 높이 올라간 경우 (y값이 작음 = 화면 위)
-          const lRaised = la.y < hipY - 0.08;
-          const rRaised = ra.y < hipY - 0.08;
-          return (lRaised !== rRaised) ? 1 : 0; // 양발 다 들리면 점프이므로 제외
+          // 두 발목의 y 차이가 신체 비율의 80% 이상 → 한 발 들림
+          if (!ok(la) || !ok(ra)) return 0;
+          return Math.abs(la.y - ra.y) > scale * 0.8 ? 1 : 0;
         }
 
         case 'arms_wide': {
+          // 양손 거리 > 신체 비율의 2.5배 (팔 벌림 보정)
           if (!ok(lw) || !ok(rw)) return 0;
-          return dst(lw, rw) > 0.52 ? 1 : 0;
+          return dst(lw, rw) > scale * 2.5 ? 1 : 0;
         }
 
         case 'body_low': {
-          if (!hipMid) return 0;
-          return hipMid.y > 0.70 ? 1 : 0;
+          // hip y > 어깨 y + 신체 비율 * 2.8 (전신이 낮아진 자세)
+          if (!hipMid || !shoulderMid) return 0;
+          return hipMid.y > shoulderMid.y + scale * 2.8 ? 1 : 0;
         }
 
         case 'squat': {
+          // 쭈그릴 때: hip-무릎 y 거리가 서있을 때(≈scale)보다 훨씬 짧아짐
           if (!hipMid || !ok(lk) || !ok(rk)) return 0;
           const kneeY = (lk.y + rk.y) / 2;
-          // hip이 낮고(화면 아래), hip-무릎 거리가 작음 (쭈그린 자세)
-          return (hipMid.y > 0.52 && Math.abs(hipMid.y - kneeY) < 0.16) ? 1 : 0;
+          return Math.abs(hipMid.y - kneeY) < scale * 0.55 ? 1 : 0;
         }
 
         case 'forward_bend': {
-          if (!ok(nose) || !ok(lk) || !ok(rk)) return 0;
+          // 앞으로 숙일 때: 어깨-무릎 y 거리가 서있을 때(≈2*scale)보다 크게 줄어듦
+          if (!shoulderMid || !ok(lk) || !ok(rk)) return 0;
           const kneeY = (lk.y + rk.y) / 2;
-          // 코가 무릎 높이에 가까워질 때 숙인 자세
-          return Math.abs(nose.y - kneeY) < 0.12 ? 1 : 0;
+          return (kneeY - shoulderMid.y) < scale * 1.2 ? 1 : 0;
         }
 
         case 'high_knee': {
+          // 무릎이 발목보다 신체 비율의 40% 이상 올라감
           if (!ok(lk) || !ok(rk) || !ok(la) || !ok(ra)) return 0;
           const ankleY = (la.y + ra.y) / 2;
-          // 무릎 중 하나가 발목보다 훨씬 높이 올라간 경우
-          return (ankleY - lk.y > 0.14 || ankleY - rk.y > 0.14) ? 1 : 0;
+          return (ankleY - lk.y > scale * 0.4 || ankleY - rk.y > scale * 0.4) ? 1 : 0;
         }
 
         case 'arm_wave': {
-          if (poseHistory.length < 10) return 0;
-          // 손목 y 위치의 분산이 크면 팔 흔들기
+          // 손목 y의 분산이 크면 팔 흔들기 (임계값 완화)
+          if (poseHistory.length < 8) return 0;
           const lwYs = poseHistory.map(h => ok(h[KP.lWrist]) ? h[KP.lWrist].y : null).filter(v => v !== null);
           const rwYs = poseHistory.map(h => ok(h[KP.rWrist]) ? h[KP.rWrist].y : null).filter(v => v !== null);
-          return (variance(lwYs) > 0.003 || variance(rwYs) > 0.003) ? 1 : 0;
+          return (variance(lwYs) > 0.0012 || variance(rwYs) > 0.0012) ? 1 : 0;
         }
 
         case 'spin': {
-          if (poseHistory.length < 12) return 0;
-          // 어깨 중심 x의 이동 범위가 크면 회전
+          // 어깨 중심 x 이동 범위 > 신체 비율의 60%
+          if (poseHistory.length < 10) return 0;
           const xs = poseHistory.map(h => {
             const a = h[KP.lShoulder], b = h[KP.rShoulder];
             return ok(a) && ok(b) ? (a.x + b.x) / 2 : null;
           }).filter(v => v !== null);
-          if (xs.length < 8) return 0;
-          return (Math.max(...xs) - Math.min(...xs)) > 0.13 ? 1 : 0;
+          if (xs.length < 7) return 0;
+          return (Math.max(...xs) - Math.min(...xs)) > scale * 0.6 ? 1 : 0;
         }
 
         case 'arms_up': {
+          // 양손목이 어깨보다 신체 비율의 20% 이상 높이 올라감
           if (!shoulderMid || !ok(lw) || !ok(rw)) return 0;
-          // 양쪽 손목이 어깨보다 높이(y값 작게) 올라간 경우
-          return (lw.y < shoulderMid.y - 0.04 && rw.y < shoulderMid.y - 0.04) ? 1 : 0;
+          return (lw.y < shoulderMid.y - scale * 0.2 && rw.y < shoulderMid.y - scale * 0.2) ? 1 : 0;
         }
 
         case 'wrist_knee': {
+          // 손목과 무릎의 거리가 신체 비율의 80% 이내
           if (!ok(lw) || !ok(rw) || !ok(lk) || !ok(rk)) return 0;
-          return (dst(lw, lk) < 0.18 || dst(rw, rk) < 0.18) ? 1 : 0;
+          return (dst(lw, lk) < scale * 0.8 || dst(rw, rk) < scale * 0.8) ? 1 : 0;
         }
 
         case 'star_jump': {
-          // 점프 또는 팔 크게 벌리기
           return (detectGesture('jump', kps) || detectGesture('arms_wide', kps)) ? 1 : 0;
         }
 
         case 'slow_move': {
+          // 아주 미세한 움직임도 감지 (거북이는 움직이기만 하면 됨)
           if (poseHistory.length < 5) return 0;
-          // 미세한 움직임도 감지
           const noseXs = poseHistory.map(h => ok(h[KP.nose]) ? h[KP.nose].x : null).filter(v => v !== null);
+          const hipYs  = poseHistory.map(h => {
+            const a = h[KP.lHip], b = h[KP.rHip];
+            return ok(a) && ok(b) ? (a.y + b.y) / 2 : null;
+          }).filter(v => v !== null);
           if (noseXs.length < 4) return 0;
-          return (Math.max(...noseXs) - Math.min(...noseXs)) > 0.012 ? 1 : 0;
+          const moved = (Math.max(...noseXs) - Math.min(...noseXs)) > 0.008
+                     || (Math.max(...hipYs)  - Math.min(...hipYs))  > 0.008;
+          return moved ? 1 : 0;
         }
 
         case 'dance': {
           if (poseHistory.length < 8) return 0;
-          // hip 위치 변화 (x 또는 y) 가 크면 춤
           const hxs = poseHistory.map(h => {
             const a = h[KP.lHip], b = h[KP.rHip];
             return ok(a) && ok(b) ? (a.x + b.x) / 2 : null;
@@ -792,9 +807,15 @@
             return ok(a) && ok(b) ? (a.y + b.y) / 2 : null;
           }).filter(v => v !== null);
           if (hxs.length < 6) return 0;
+          const hys = poseHistory.map(h => {
+            const a = h[KP.lHip], b = h[KP.rHip];
+            return ok(a) && ok(b) ? (a.y + b.y) / 2 : null;
+          }).filter(v => v !== null);
+          if (hxs.length < 6) return 0;
           const xR = Math.max(...hxs) - Math.min(...hxs);
           const yR = Math.max(...hys) - Math.min(...hys);
-          return (xR > 0.04 || yR > 0.04) ? 1 : 0;
+          // 신체 비율 대비 움직임 (춤은 몸 전체가 흔들림)
+          return (xR > scale * 0.18 || yR > scale * 0.18) ? 1 : 0;
         }
 
         default:
