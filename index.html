@@ -556,6 +556,14 @@
       }
     }
 
+    function shuffleMissions() {
+      const solo   = missions.filter(m => !m.friend);
+      const friend = missions.filter(m =>  m.friend);
+      shuffle(solo);
+      shuffle(friend);
+      missions.splice(0, missions.length, ...solo, ...friend);
+    }
+
     function renderMission(animate = false) {
       const m = missions[currentIndex];
       document.getElementById('missionBadge').textContent = `미션 ${currentIndex + 1} / ${missions.length}`;
@@ -643,7 +651,7 @@
     }
 
     function restart() {
-      shuffle(missions);
+      shuffleMissions();
       currentIndex = 0;
       completed = 0;
       detectionProgress = 0;
@@ -690,7 +698,7 @@
     }
 
     function startGame() {
-      shuffle(missions);
+      shuffleMissions();
       gameStarted = true;
       document.getElementById('startScreen').classList.add('hidden');
       renderMission();
