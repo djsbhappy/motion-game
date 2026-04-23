@@ -72,6 +72,22 @@
       letter-spacing: 0.5px;
     }
 
+    .friend-badge {
+      display: inline-block;
+      background: rgba(255,220,50,0.35);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 14px;
+      border-radius: 99px;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+      border: 1px solid rgba(255,220,50,0.6);
+    }
+    .mission-card.friend-mission {
+      background: linear-gradient(135deg, #f7971e, #ffd200);
+    }
+
     .mission-emoji {
       font-size: 3rem;
       display: block;
@@ -429,7 +445,8 @@
 
     <!-- 미션 카드 -->
     <div class="mission-card" id="missionCard">
-      <div class="mission-badge" id="missionBadge">미션 1 / 30</div>
+      <div class="mission-badge" id="missionBadge">미션 1 / 15</div>
+      <div class="friend-badge" id="friendBadge" style="display:none">👫 친구랑 함께!</div>
       <span class="mission-emoji" id="missionEmoji"></span>
       <div class="mission-name" id="missionName"></div>
       <div class="mission-desc" id="missionDesc"></div>
@@ -465,7 +482,7 @@
     <div class="start-card">
       <span class="start-emoji">🏃</span>
       <div class="start-title">폴짝 미션!</div>
-      <div class="start-desc">30가지 재미있는 동작 미션에<br>도전해 보아요! 준비되셨나요? 💪</div>
+      <div class="start-desc">15가지 재미있는 동작 미션에<br>도전해 보아요! 준비되셨나요? 💪</div>
       <button class="btn-start" onclick="startGame()">🚀 시작하기!</button>
       <div id="aiStatus" class="ai-status">🔄 AI 로딩중... (로딩 전에도 시작 가능)</div>
     </div>
@@ -476,7 +493,7 @@
     <div class="complete-card">
       <span class="complete-emoji">🏆</span>
       <div class="complete-title">모두 완료!</div>
-      <div class="complete-desc">30개 미션을 전부 해냈어요!<br>정말 대단해요! 👏</div>
+      <div class="complete-desc">15개 미션을 전부 해냈어요!<br>정말 대단해요! 👏</div>
       <button class="btn-restart" onclick="restart()">🔄 다시 시작</button>
     </div>
   </div>
@@ -486,36 +503,23 @@
     //  미션 데이터
     // ══════════════════════════════════════════
     const missions = [
+      // ── 혼자 하는 미션 10 ──
       { emoji: "🦩", name: "한 발로 폴짝폴짝", desc: "한 발로 제자리에서 5번 뛰어보아요!", detect: "one_leg" },
       { emoji: "🐸", name: "개구리 점프", desc: "쭈그려 앉았다가 높이 점프!", detect: "squat" },
       { emoji: "🦘", name: "캥거루 뛰기", desc: "두 발을 모아서 앞으로 3번 뛰어가요!", detect: "jump" },
-      { emoji: "🐧", name: "펭귄 걷기", desc: "발끝을 벌리고 뒤뚱뒤뚱 걸어요!", detect: "high_knee" },
       { emoji: "🦋", name: "나비 팔 흔들기", desc: "팔을 날개처럼 펼치고 나비처럼 흔들어요!", detect: "arms_wide" },
-      { emoji: "🐊", name: "악어 기어가기", desc: "배를 땅에 붙이고 팔로 기어가요!", detect: "body_low" },
-      { emoji: "🐨", name: "곰처럼 걷기", desc: "두 손, 두 발을 땅에 짚고 걸어요!", detect: "body_low" },
-      { emoji: "🦀", name: "게 걷기", desc: "손발을 땅에 짚고 옆으로 걸어요!", detect: "body_low" },
-      { emoji: "🐍", name: "뱀처럼 구불구불", desc: "바닥에 누워서 온몸으로 구불구불!", detect: "body_low" },
       { emoji: "🐘", name: "코끼리 코 흔들기", desc: "두 팔을 늘어뜨리고 코처럼 흔들어요!", detect: "arm_wave" },
-      { emoji: "🐰", name: "토끼 점프", desc: "무릎을 살짝 구부리고 폴짝폴짝!", detect: "jump" },
-      { emoji: "🦊", name: "여우 꼬리 잡기", desc: "제자리에서 빙글빙글 뒤를 쫓아요!", detect: "spin" },
-      { emoji: "🐠", name: "물고기 헤엄치기", desc: "팔을 저으며 물고기처럼 헤엄쳐요!", detect: "arm_wave" },
-      { emoji: "🦅", name: "독수리 날기", desc: "팔을 크게 펼치고 날아다녀요!", detect: "arms_wide" },
-      { emoji: "🐛", name: "애벌레 구르기", desc: "몸을 동그랗게 말아서 옆으로 굴러요!", detect: "body_low" },
-      { emoji: "🐢", name: "거북이 걷기", desc: "아주 천천히~ 거북이처럼 느리게!", detect: "slow_move" },
       { emoji: "🦁", name: "사자 포효", desc: "두 팔을 높이 들고 어흥! 점프!", detect: "arms_up" },
-      { emoji: "🐒", name: "원숭이 매달리기", desc: "팔을 크게 흔들며 신나게 뛰어요!", detect: "arm_wave" },
-      { emoji: "🌈", name: "무지개 점프", desc: "점프하며 팔로 무지개를 그려요!", detect: "jump" },
       { emoji: "⭐", name: "별 모양 점프", desc: "점프하며 팔다리를 크게 벌려요!", detect: "star_jump" },
       { emoji: "🌀", name: "팽이 돌기", desc: "제자리에서 5바퀴 빙글빙글!", detect: "spin" },
-      { emoji: "🎯", name: "한 발 균형 잡기", desc: "한 발로 10초 동안 균형을 잡아요!", detect: "one_leg" },
-      { emoji: "🏄", name: "파도타기 서핑", desc: "다리를 벌리고 서핑 자세를 해요!", detect: "squat" },
-      { emoji: "🤸", name: "몸 구부리기", desc: "발을 벌리고 앞으로 허리를 구부려요!", detect: "forward_bend" },
-      { emoji: "🥁", name: "무릎 드럼 치기", desc: "손으로 무릎을 두드려 드럼을 쳐요!", detect: "wrist_knee" },
-      { emoji: "🚀", name: "로켓 발사", desc: "쭈그려 앉았다가 발사! 높이 점프!", detect: "squat" },
       { emoji: "🌊", name: "파도 움직이기", desc: "팔을 물결처럼 부드럽게 흔들어요!", detect: "arm_wave" },
-      { emoji: "🎪", name: "광대 걷기", desc: "무릎을 높이 들며 씩씩하게 행진!", detect: "high_knee" },
-      { emoji: "🧘", name: "나무 자세 균형", desc: "한 발로 서서 두 손을 머리 위로!", detect: "one_leg" },
       { emoji: "🎊", name: "축하 댄스", desc: "자유롭게 마음껏 춤춰요! 파이팅!", detect: "dance" },
+      // ── 친구랑 함께 하는 미션 5 ──
+      { emoji: "👯", name: "쌍둥이 점프", desc: "친구랑 손 잡고 동시에 폴짝폴짝!", detect: "jump", friend: true },
+      { emoji: "🤝", name: "손잡고 빙글빙글", desc: "친구랑 손잡고 함께 빙글빙글 돌아요!", detect: "spin", friend: true },
+      { emoji: "🕺", name: "친구랑 댄스 배틀", desc: "친구랑 마주보고 신나게 춤 대결!", detect: "dance", friend: true },
+      { emoji: "🚂", name: "기차 행진", desc: "친구 어깨 잡고 한 줄로 무릎 높이 행진!", detect: "high_knee", friend: true },
+      { emoji: "🙌", name: "하이파이브 점프", desc: "친구랑 마주보고 점프하며 하이파이브!", detect: "jump", friend: true },
     ];
 
     // ══════════════════════════════════════════
@@ -558,6 +562,12 @@
       document.getElementById('missionEmoji').textContent = m.emoji;
       document.getElementById('missionName').textContent = m.name;
       document.getElementById('missionDesc').textContent = m.desc;
+
+      const friendBadge = document.getElementById('friendBadge');
+      if (friendBadge) friendBadge.style.display = m.friend ? 'block' : 'none';
+      const card = document.getElementById('missionCard');
+      if (m.friend) card.classList.add('friend-mission');
+      else card.classList.remove('friend-mission');
 
       if (animate) {
         const card = document.getElementById('missionCard');
